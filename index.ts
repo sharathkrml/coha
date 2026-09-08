@@ -1,10 +1,10 @@
-import { generateText, stepCountIs, streamText } from "ai"
+import { generateText, isLoopFinished, streamText } from "ai"
 import type { ModelMessage } from "ai"
 import { createInterface } from "node:readline"
 import {
+  getProviders,
   AIBRIDGE_BASE_URL,
-  AIBRIDGE_DEFAULT_MODEL,
-  getAIBridgeModel,
+  OPENGO_BASE_URL,
 } from "./utils/provider.ts"
 import { bashTool } from "./utils/tools.ts"
 import { formatText, StreamFormatter } from "./utils/render.ts"
@@ -33,17 +33,17 @@ export async function getUserPrompt(): Promise<string | undefined> {
 
 // One conversation turn: sends the whole history, executes tools,
 // and returns the text plus the new messages to append to history.
+// Providers are tried in priority order (AIBridge first, then OpenCode Go);
+// the first that succeeds wins.
 export async function chatTurn(
   messages: ModelMessage[],
   opts?: { stream?: boolean },
 ): Promise<{ text: string; responseMessages: ModelMessage[] }> {
-  const model = getAIBridgeModel()
   const tools = { bash: bashTool }
   const shouldStream = opts?.stream ?? !process.argv.includes("--no-stream")
   const started = performance.now()
 
   dev.banner("chat turn")
-  dev.kv("model", AIBRIDGE_DEFAULT_MODEL)
   dev.kv("history", `${messages.length} message(s)`)
   dev.kv("mode", shouldStream ? "stream" : "generate")
   const lastUser = [...messages].reverse().find((m) => m.role === "user")
@@ -55,36 +55,63 @@ export async function chatTurn(
       `${detail} · ${Math.round(performance.now() - started)}ms`,
     )
 
-  if (!shouldStream) {
-    const { text, responseMessages } = await generateText({
-      model,
-      messages,
-      tools,
-      stopWhen: stepCountIs(5),
-    })
-    finish(`generate · ${text.length} chars`)
-    return { text: formatText(text), responseMessages }
+  const providers = getProviders()
+  if (providers.length === 0) {
+    console.error(
+      "No API key configured. Set AIBRIDGE_API_KEY (priority) and/or " +
+        "OPENCODE_API_KEY in your environment or .env file.",
+    )
+    process.exit(1)
   }
 
-  const result = streamText({
-    model,
-    messages,
-    tools,
-    stopWhen: stepCountIs(5),
-  })
   const formatter = new StreamFormatter()
-  let full = ""
-  for await (const delta of result.textStream) {
-    full += delta
-    process.stdout.write(formatter.feed(delta))
+  const errors: string[] = []
+
+  for (const provider of providers) {
+    dev.kv("provider", `${provider.name} · ${provider.modelId}`)
+    try {
+      if (!shouldStream) {
+        const { text, responseMessages } = await generateText({
+          model: provider.model,
+          messages,
+          tools,
+          stopWhen: isLoopFinished(),
+        })
+        finish(`${provider.name} · generate · ${text.length} chars`)
+        return { text: formatText(text), responseMessages }
+      }
+
+      const result = streamText({
+        model: provider.model,
+        messages,
+        tools,
+        stopWhen: isLoopFinished(),
+      })
+      let full = ""
+      for await (const delta of result.textStream) {
+        full += delta
+        process.stdout.write(formatter.feed(delta))
+      }
+      // Flush the final partial line.
+      process.stdout.write(formatter.end())
+      // Ensure trailing newline for clean shell output.
+      if (full && !full.endsWith("\n")) process.stdout.write("\n")
+      const responseMessages = await result.responseMessages
+      finish(
+        `${provider.name} · stream · ${full.length} chars · ${responseMessages.length} msgs`,
+      )
+      return { text: formatText(full), responseMessages }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      // Streamed output may have already printed partial junk before failing.
+      if (shouldStream)
+        console.error("\n[fallback] provider failed, trying next…")
+      errors.push(`${provider.name}: ${message}`)
+      dev.kv("error", `${provider.name} failed: ${message.slice(0, 120)}`)
+    }
   }
-  // Flush the final partial line.
-  process.stdout.write(formatter.end())
-  // Ensure trailing newline for clean shell output.
-  if (full && !full.endsWith("\n")) process.stdout.write("\n")
-  const responseMessages = await result.responseMessages
-  finish(`stream · ${full.length} chars · ${responseMessages.length} msgs`)
-  return { text: formatText(full), responseMessages }
+
+  throw new Error(`All providers failed:\n  ${errors.join("\n  ")}`)
 }
 
 // Backwards-compatible one-shot runner.
@@ -103,7 +130,9 @@ export async function chatLoop(): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout })
 
   console.log(
-    `coha chat — ${AIBRIDGE_DEFAULT_MODEL} via AIBridge\n` +
+    `coha chat — priority: ${getProviders()
+      .map((p) => `${p.name} (${p.modelId})`)
+      .join(" → ")}\n` +
       "Type a message; /exit (or Ctrl+D) to quit. Tools: bash",
   )
 
@@ -179,14 +208,15 @@ if (import.meta.main) {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    // Friendly hint for the classic wrong-endpoint 500 on OpenAI-compatible APIs.
     if (
       message.includes("500") ||
       message.toLowerCase().includes("internal server error")
     ) {
       console.error(
-        `\nHint: ${AIBRIDGE_DEFAULT_MODEL} uses the Chat Completions endpoint ` +
-          `(${AIBRIDGE_BASE_URL}/chat/completions). Make sure baseURL is "${AIBRIDGE_BASE_URL}" with .chat("${AIBRIDGE_DEFAULT_MODEL}").`,
+        `\nHint: a provider returned a server error. AIBridge uses ` +
+          `${AIBRIDGE_BASE_URL}/chat/completions and OpenCode Go uses ` +
+          `${OPENGO_BASE_URL}/chat/completions (with x-opencode-session header) — ` +
+          `both via .chat(). Check the provider status or your keys.`,
       )
     }
     console.error(`\nError: ${message}`)
