@@ -1,0 +1,16 @@
+{
+  "name": "coha",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^4.0.60",
+    "ai": "^7.0.93"
+  }
+}
