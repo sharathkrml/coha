@@ -54,7 +54,7 @@ export async function chatTurn(
   const providers = getProviders()
   if (providers.length === 0) {
     console.error(
-      "No API key configured. Set AIBRIDGE_API_KEY (priority) and/or " +
+      "No API key configured. Set NVIDIA_API_KEY (priority), AIBRIDGE_API_KEY and/or " +
         "OPENCODE_API_KEY in your environment or .env file.",
     )
     process.exit(1)
@@ -131,7 +131,7 @@ export async function chatLoop(): Promise<void> {
     `coha chat — priority: ${getProviders()
       .map((p) => `${p.name} (${p.modelId})`)
       .join(" → ")}\n` +
-      "Type a message; /exit (or Ctrl+D) to quit. Tools: bash",
+      "Type a message; /exit (or Ctrl+D) to quit. Tools: bash, readFile",
   )
 
   const messages: ModelMessage[] = []

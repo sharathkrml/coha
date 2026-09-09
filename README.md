@@ -12,7 +12,8 @@ two OpenAI-compatible APIs are configured and tried in order - **the first that 
 
 | provider | base URL | model | key |
 |---|---|---|---|
-| **Ollama** (primary, local) | http://localhost:11434/v1 | gemma4:e4b (`OLLAMA_MODEL` to override) | none |
+| **NVIDIA** (first preference) | https://integrate.api.nvidia.com/v1 | meta/llama-3.1-405b-instruct (`NVIDIA_MODEL` to override) | NVIDIA_API_KEY |
+| **Ollama** (local) | http://localhost:11434/v1 | gemma4:e4b (`OLLAMA_MODEL` to override) | none |
 | **AIBridge** | https://aibridge-api.com/v1 | deepseek-v4-flash | AIBRIDGE_API_KEY |
 | **OpenCode Go** (fallback) | https://opencode.ai/zen/go/v1 | glm-5.3-flash | OPENCODE_API_KEY |
 
@@ -62,6 +63,8 @@ bun run index.ts --quiet "your prompt here"       # no dev logs
 the magic happens in `.env`:
 
 AIBRIDGE_API_KEY=your-key-here     # required - primary provider
+NVIDIA_API_KEY=your-key-here       # optional - first preference when set
+NVIDIA_MODEL=model-id              # optional - override the NVIDIA model
 OPENCODE_API_KEY=your-key-here     # optional - enables the fallback provider
 OPENCODE_SESSION_ID=stable-id      # optional - stable session for OpenCode Go
 COHA_DEBUG=0                       # optional - dev logs off by default
