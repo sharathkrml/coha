@@ -12,7 +12,8 @@ two OpenAI-compatible APIs are configured and tried in order - **the first that 
 
 | provider | base URL | model | key |
 |---|---|---|---|
-| **AIBridge** (primary) | https://aibridge-api.com/v1 | deepseek-v4-flash | AIBRIDGE_API_KEY |
+| **Ollama** (primary, local) | http://localhost:11434/v1 | gemma4:e4b (`OLLAMA_MODEL` to override) | none |
+| **AIBridge** | https://aibridge-api.com/v1 | deepseek-v4-flash | AIBRIDGE_API_KEY |
 | **OpenCode Go** (fallback) | https://opencode.ai/zen/go/v1 | glm-5.3-flash | OPENCODE_API_KEY |
 
 > OpenCode Go also wants a stable session id sent as the `x-opencode-session` header (for routing / prompt caching). Set `OPENCODE_SESSION_ID` or it auto-generates one per run.

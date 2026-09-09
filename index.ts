@@ -4,6 +4,7 @@ import { createInterface } from "node:readline"
 import {
   getProviders,
 } from "./utils/provider.ts"
+import { systemPrompt } from "./utils/prompts.ts"
 import { tools } from "./utils/tools.ts"
 import { formatText, StreamFormatter } from "./utils/render.ts"
 import { dev } from "./utils/log.ts"
@@ -67,6 +68,7 @@ export async function chatTurn(
       if (!shouldStream) {
         const { text, responseMessages } = await generateText({
           model: provider.model,
+          system: systemPrompt,
           messages,
           tools,
           stopWhen: isLoopFinished(),
@@ -78,6 +80,7 @@ export async function chatTurn(
       const formatter = new StreamFormatter()
       const result = streamText({
         model: provider.model,
+        system: systemPrompt,
         messages,
         tools,
         stopWhen: isLoopFinished(),

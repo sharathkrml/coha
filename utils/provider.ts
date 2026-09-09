@@ -1,7 +1,12 @@
 import { createOpenAI } from "@ai-sdk/openai"
 import type { LanguageModel } from "ai"
 
-// Two OpenAI-compatible APIs, tried in order (AIBridge has priority):
+// Local-first provider list, tried in order:
+//
+// 0. Ollama     POST http://localhost:11434/v1/chat/completions
+//               {"model":"gemma4:e4b","messages":[...]}
+//
+// 1. AIBridge   POST https://aibridge-api.com/v1/chat/completions
 //
 // 1. AIBridge   POST https://aibridge-api.com/v1/chat/completions
 //               -H "Authorization: Bearer $AIBRIDGE_API_KEY"
@@ -16,6 +21,9 @@ import type { LanguageModel } from "ai"
 // its /chat/completions works, so we use .chat() for both providers.
 export const AIBRIDGE_BASE_URL = "https://aibridge-api.com/v1"
 export const AIBRIDGE_DEFAULT_MODEL = "deepseek-v4-flash"
+
+export const OLLAMA_BASE_URL = "http://localhost:11434/v1"
+export const OLLAMA_DEFAULT_MODEL = "gemma4:e4b"
 
 export const OPENGO_BASE_URL = "https://opencode.ai/zen/go/v1"
 export const OPENGO_MODEL_ID = "glm-5.3-flash"
@@ -46,6 +54,10 @@ function chat(
 
 export function getProviders(): Provider[] {
   const providers: Provider[] = []
+
+  // Ollama is local and free — always first preference when reachable.
+  // The OpenAI client requires a key; Ollama ignores it.
+  providers.push(chat("ollama", OLLAMA_BASE_URL, "ollama", process.env.OLLAMA_MODEL ?? OLLAMA_DEFAULT_MODEL))
 
   if (process.env.AIBRIDGE_API_KEY) {
     providers.push(
