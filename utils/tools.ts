@@ -6,11 +6,10 @@ import { dev } from "./log.ts"
 const MAX_OUTPUT_CHARS = 20_000
 
 function truncate(text: string): string {
-  if (text.length <= MAX_OUTPUT_CHARS) return text
-  return (
-    text.slice(0, MAX_OUTPUT_CHARS) +
-    `\n... [truncated ${text.length - MAX_OUTPUT_CHARS} chars]`
-  )
+  return text.length <= MAX_OUTPUT_CHARS
+    ? text
+    : text.slice(0, MAX_OUTPUT_CHARS) +
+        `\n... [truncated ${text.length - MAX_OUTPUT_CHARS} chars]`
 }
 
 export const bashTool = tool({
@@ -34,10 +33,9 @@ export const bashTool = tool({
     dev.kv("cwd", cwd ?? process.cwd())
     dev.line(`$ ${trimmed}`)
 
-    let shell = $`${{ raw: trimmed }}`.nothrow().quiet()
-    if (cwd) shell = shell.cwd(cwd)
-
-    const result = await shell
+    const result = await (cwd
+      ? $`${{ raw: trimmed }}`.nothrow().quiet().cwd(cwd)
+      : $`${{ raw: trimmed }}`.nothrow().quiet())
     const stdout = truncate(result.stdout.toString())
     const stderr = truncate(result.stderr.toString())
     const ms = Math.round(performance.now() - started)

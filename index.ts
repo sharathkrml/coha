@@ -3,21 +3,17 @@ import type { ModelMessage } from "ai"
 import { createInterface } from "node:readline"
 import {
   getProviders,
-  AIBRIDGE_BASE_URL,
-  OPENGO_BASE_URL,
 } from "./utils/provider.ts"
-import { bashTool } from "./utils/tools.ts"
+import { tools } from "./utils/tools.ts"
 import { formatText, StreamFormatter } from "./utils/render.ts"
 import { dev } from "./utils/log.ts"
 
 async function readStdin(): Promise<string> {
   // If stdin is a TTY there is nothing piped in.
   if (process.stdin.isTTY) return ""
-  const chunks: Buffer[] = []
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk as Buffer)
-  }
-  return Buffer.concat(chunks).toString("utf-8").trim()
+  let text = ""
+  for await (const chunk of process.stdin) text += chunk
+  return text.trim()
 }
 
 export async function getUserPrompt(): Promise<string | undefined> {
@@ -39,8 +35,7 @@ export async function chatTurn(
   messages: ModelMessage[],
   opts?: { stream?: boolean },
 ): Promise<{ text: string; responseMessages: ModelMessage[] }> {
-  const tools = { bash: bashTool }
-  const shouldStream = opts?.stream ?? !process.argv.includes("--no-stream")
+  const shouldStream = opts?.stream ?? !NO_STREAM
   const started = performance.now()
 
   dev.banner("chat turn")
@@ -64,7 +59,6 @@ export async function chatTurn(
     process.exit(1)
   }
 
-  const formatter = new StreamFormatter()
   const errors: string[] = []
 
   for (const provider of providers) {
@@ -81,6 +75,7 @@ export async function chatTurn(
         return { text: formatText(text), responseMessages }
       }
 
+      const formatter = new StreamFormatter()
       const result = streamText({
         model: provider.model,
         messages,
@@ -124,9 +119,9 @@ export async function runPrompt(
 }
 
 const EXIT_COMMANDS = new Set(["/exit", "/quit", "/q"])
+const NO_STREAM = process.argv.includes("--no-stream")
 
 export async function chatLoop(): Promise<void> {
-  const streaming = !process.argv.includes("--no-stream")
   const rl = createInterface({ input: process.stdin, output: process.stdout })
 
   console.log(
@@ -140,15 +135,15 @@ export async function chatLoop(): Promise<void> {
 
   const readLine = (): Promise<string> =>
     new Promise((resolve) => {
-      const finish = (value: string) => {
+      const done = (value: string) => {
         rl.removeListener("line", onLine)
         rl.removeListener("SIGINT", onSigint)
         resolve(value)
       }
-      const onLine = (line: string) => finish(line.trim())
+      const onLine = (line: string) => done(line.trim())
       const onSigint = () => {
         process.stdout.write("\n")
-        finish("/exit")
+        done("/exit")
       }
       rl.once("line", onLine)
       rl.once("SIGINT", onSigint)
@@ -163,7 +158,7 @@ export async function chatLoop(): Promise<void> {
 
     try {
       const { text, responseMessages } = await chatTurn(messages, {
-        stream: streaming,
+        stream: !NO_STREAM,
       })
       if (!text) console.log("(no text output)")
       messages.push(...responseMessages)
@@ -184,14 +179,9 @@ if (import.meta.main) {
   try {
     const oneShot = await getUserPrompt()
     if (oneShot) {
-      // Piped input or CLI args -> one-shot mode (unchanged behavior).
-      const streaming = !process.argv.includes("--no-stream")
-      if (streaming) {
-        await runPrompt(oneShot, { stream: true })
-      } else {
-        const text = await runPrompt(oneShot, { stream: false })
-        console.log(text)
-      }
+      // Piped input or CLI args -> one-shot mode (streaming prints itself).
+      const text = await runPrompt(oneShot, { stream: !NO_STREAM })
+      if (NO_STREAM) console.log(text)
     } else if (process.stdin.isTTY && process.stdout.isTTY) {
       // Interactive terminal -> continuous chat loop.
       await chatLoop()
@@ -208,15 +198,10 @@ if (import.meta.main) {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    if (
-      message.includes("500") ||
-      message.toLowerCase().includes("internal server error")
-    ) {
+    if (message.includes("500") || message.toLowerCase().includes("internal server error")) {
       console.error(
-        `\nHint: a provider returned a server error. AIBridge uses ` +
-          `${AIBRIDGE_BASE_URL}/chat/completions and OpenCode Go uses ` +
-          `${OPENGO_BASE_URL}/chat/completions (with x-opencode-session header) — ` +
-          `both via .chat(). Check the provider status or your keys.`,
+        "\nHint: a provider returned a server error. " +
+          "Check the provider status or your keys.",
       )
     }
     console.error(`\nError: ${message}`)

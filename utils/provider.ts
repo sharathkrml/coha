@@ -26,42 +26,49 @@ export type Provider = {
   model: LanguageModel
 }
 
+// Stable per process (required for OpenCode Go routing / prompt caching).
+// Override with OPENCODE_SESSION_ID.
+const SESSION_ID = process.env.OPENCODE_SESSION_ID ?? `coha-${Date.now()}`
+
+function chat(
+  name: string,
+  baseURL: string,
+  apiKey: string,
+  modelId: string,
+  headers?: Record<string, string>,
+): Provider {
+  return {
+    name,
+    modelId,
+    model: createOpenAI({ baseURL, apiKey, name, headers }).chat(modelId),
+  }
+}
+
 export function getProviders(): Provider[] {
   const providers: Provider[] = []
 
-  const aibridgeKey = process.env.AIBRIDGE_API_KEY
-  if (aibridgeKey) {
-    providers.push({
-      name: "aibridge",
-      modelId: AIBRIDGE_DEFAULT_MODEL,
-      model: createOpenAI({
-        baseURL: AIBRIDGE_BASE_URL,
-        apiKey: aibridgeKey,
-        name: "aibridge",
-      }).chat(AIBRIDGE_DEFAULT_MODEL),
-    })
+  if (process.env.AIBRIDGE_API_KEY) {
+    providers.push(
+      chat(
+        "aibridge",
+        AIBRIDGE_BASE_URL,
+        process.env.AIBRIDGE_API_KEY,
+        AIBRIDGE_DEFAULT_MODEL,
+      ),
+    )
   }
 
-  const opencodeKey = process.env.OPENCODE_API_KEY
-  if (opencodeKey) {
-    providers.push({
-      name: "opencode-go",
-      modelId: OPENGO_MODEL_ID,
-      model: createOpenAI({
-        baseURL: OPENGO_BASE_URL,
-        apiKey: opencodeKey,
-        name: "opencode-go",
+  if (process.env.OPENCODE_API_KEY) {
+    providers.push(
+      chat("opencode-go", OPENGO_BASE_URL, process.env.OPENCODE_API_KEY, OPENGO_MODEL_ID, {
         // Go asks clients to identify themselves + send a stable session id
         // for routing / prompt caching. Required: without it the API 400s.
         // See https://opencode.ai/docs/go/#where-can-i-use-it
-        headers: {
-          "User-Agent": "coha/1.0",
-          "X-Title": "coha",
-          "x-opencode-session":
-            process.env.OPENCODE_SESSION_ID ?? `coha-${Date.now()}`,
-        },
-      }).chat(OPENGO_MODEL_ID),
-    })
+        "User-Agent": "coha/1.0",
+        "X-Title": "coha",
+        "x-opencode-session": SESSION_ID,
+      }),
+    )
   }
 
   return providers

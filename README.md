@@ -76,7 +76,6 @@ if no key is set at all, it prints a hint and bails (exit 1). if a provider 500s
 - `utils/tools.ts` - the bash tool (runs via `Bun.$`, truncates output at 20k chars)
 - `utils/render.ts` - Markdown to terminal pretty-printing (works live on streams)
 - `utils/log.ts` - dev-log banners (dim lines to stderr; off with `--quiet` / `COHA_DEBUG=0`)
-- `utils/prompts.ts` - system-prompt template (reserved, not wired in yet)
 
 ## the vibes 🎨
 

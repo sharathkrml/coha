@@ -16,10 +16,6 @@ export function isDev(): boolean {
 
 const dim = (s: string) => (process.stderr.isTTY ? `\x1b[2m${s}\x1b[0m` : s)
 
-function stars(): string {
-  return "*".repeat(WIDTH)
-}
-
 function centered(title: string): string {
   const label = `  ${title}  `
   const fill = Math.max(0, WIDTH - label.length)
@@ -27,18 +23,10 @@ function centered(title: string): string {
   return "*".repeat(left) + label + "*".repeat(fill - left)
 }
 
-/** Blank line + full-width banner to stderr. */
-export function banner(title: string): void {
+/** Blank line + full-width banner to stderr, optionally with trailing detail. */
+export function banner(title: string, detail?: string): void {
   if (!isDev()) return
-  process.stderr.write(`\n${dim(centered(title))}\n`)
-}
-
-/** Full-width banner with trailing metadata (e.g. timing). */
-export function bannerEnd(title: string, detail?: string): void {
-  if (!isDev()) return
-  process.stderr.write(
-    `\n${dim(centered(detail ? `${title} · ${detail}` : title))}\n`,
-  )
+  process.stderr.write(`\n${dim(centered(detail ? `${title} · ${detail}` : title))}\n`)
 }
 
 /** A single key/value line under a banner. */
@@ -53,5 +41,7 @@ export function line(text: string): void {
   process.stderr.write(`${dim("  ")}${text}\n`)
 }
 
+export const bannerEnd = (title: string, detail?: string) =>
+  banner(title, detail)
+
 export const dev = { isDev, banner, bannerEnd, kv, line }
-export const DEV_RULE = () => (isDev() ? dim(stars()) : "")
