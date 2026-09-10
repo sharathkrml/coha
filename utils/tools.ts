@@ -1,8 +1,8 @@
 import { $ } from "bun"
 import { tool } from "ai"
 import { z } from "zod"
-import { readFile } from "node:fs/promises"
-import { resolve } from "node:path"
+import { readFile, writeFile, mkdir } from "node:fs/promises"
+import { resolve, dirname } from "node:path"
 import { dev } from "./log.ts"
 
 const MAX_OUTPUT_CHARS = 20_000
@@ -85,7 +85,101 @@ export const readFileTool = tool({
   },
 })
 
+export const writeFileTool = tool({
+  description:
+    "Write (create or overwrite) a text file on disk. " +
+    "Use for creating new files or replacing whole file contents. " +
+    "Parent directories are created as needed.",
+  inputSchema: z.object({
+    path: z.string().describe("Path of the file to write"),
+    content: z.string().describe("Full text content to write to the file"),
+    cwd: z.string().optional().describe("Base directory the path is relative to"),
+  }),
+  execute: async ({
+    path,
+    content,
+    cwd,
+  }: {
+    path: string
+    content: string
+    cwd?: string
+  }) => {
+    const full = cwd ? resolve(cwd, path) : resolve(path)
+    const id = ++callSeq
+    dev.banner(`write file tool #${id}`)
+    dev.kv("path", `${full} · ${content.length} chars`)
+
+    try {
+      await mkdir(dirname(full), { recursive: true })
+      await writeFile(full, content, "utf-8")
+      dev.bannerEnd(`write file tool #${id}`, "ok")
+      return `Wrote ${content.length} chars to ${full}`
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      dev.bannerEnd(`write file tool #${id}`, `error · ${message.slice(0, 120)}`)
+      return `Error writing ${full}: ${message}`
+    }
+  },
+})
+
+export const editFileTool = tool({
+  description:
+    "Replace text in a file via exact string match. " +
+    "Use for edits, refactors, bug fixes. Fails if oldString not found or not unique (unless replaceAll is true).",
+  inputSchema: z.object({
+    path: z.string().describe("Path of the file to edit"),
+    oldString: z.string().describe("Exact text to find in the file"),
+    newString: z.string().describe("Text to replace it with"),
+    replaceAll: z
+      .boolean()
+      .optional()
+      .describe("Replace every occurrence (default false)"),
+    cwd: z.string().optional().describe("Base directory the path is relative to"),
+  }),
+  execute: async ({
+    path,
+    oldString,
+    newString,
+    replaceAll,
+    cwd,
+  }: {
+    path: string
+    oldString: string
+    newString: string
+    replaceAll?: boolean
+    cwd?: string
+  }) => {
+    const full = cwd ? resolve(cwd, path) : resolve(path)
+    const id = ++callSeq
+    dev.banner(`edit file tool #${id}`)
+    dev.kv("path", full)
+
+    try {
+      const current = await readFile(full, "utf-8")
+      if (!current.includes(oldString))
+        return `Error: oldString not found in ${full}`
+      const matches = current.split(oldString).length - 1
+      if (matches > 1 && !replaceAll)
+        return `Error: oldString found ${matches} times in ${full} — provide more context or set replaceAll: true`
+      const updated = replaceAll
+        ? current.split(oldString).join(newString)
+        : current.replace(oldString, newString)
+      await writeFile(full, updated, "utf-8")
+      dev.bannerEnd(`edit file tool #${id}`, `ok · ${matches} match(es)`)
+      return replaceAll
+        ? `Replaced ${matches} occurrence(s) in ${full}`
+        : `Edited ${full}`
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      dev.bannerEnd(`edit file tool #${id}`, `error · ${message.slice(0, 120)}`)
+      return `Error editing ${full}: ${message}`
+    }
+  },
+})
+
 export const tools = {
   bash: bashTool,
   readFile: readFileTool,
+  writeFile: writeFileTool,
+  editFile: editFileTool,
 }

@@ -131,7 +131,7 @@ export async function chatLoop(): Promise<void> {
     `coha chat — priority: ${getProviders()
       .map((p) => `${p.name} (${p.modelId})`)
       .join(" → ")}\n` +
-      "Type a message; /exit (or Ctrl+D) to quit. Tools: bash, readFile",
+      "Type a message; /exit (or Ctrl+D) to quit. Tools: bash, readFile, writeFile, editFile",
   )
 
   const messages: ModelMessage[] = []
